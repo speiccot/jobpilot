@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "JobPilot",
+  "version": "0.1.0",
+  "description": "AI job-search copilot for the job page you are currently viewing.",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": [
+    "http://localhost:3001/*",
+    "https://www.zhipin.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JobPilot"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.zhipin.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

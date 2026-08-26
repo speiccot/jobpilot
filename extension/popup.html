@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      width: 380px;
+      font-family: Inter, Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f7f8fa;
+      color: #111;
+    }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 14px;
+      margin: 10px 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #111;
+      color: white;
+    }
+    button.secondary {
+      background: #eee;
+      color: #111;
+      margin-top: 8px;
+    }
+    .score { font-size: 34px; font-weight: 800; }
+    .pill {
+      display: inline-block;
+      background: #eee;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    ul { padding-left: 18px; }
+    #status { font-size: 12px; color: #666; margin-top: 8px; }
+    .msg { white-space: pre-wrap; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <h1>JobPilot</h1>
+  <button id="analyze">Analyze current job</button>
+  <div id="status"></div>
+
+  <section id="result" style="display:none">
+    <div class="card">
+      <span class="pill" id="rec"></span>
+      <div class="score"><span id="score"></span>/100</div>
+      <div id="role"></div>
+    </div>
+
+    <div class="card">
+      <b>为什么</b>
+      <ul id="reasons"></ul>
+      <b>风险</b>
+      <ul id="risks"></ul>
+    </div>
+
+    <div class="card">
+      <b>推荐开场白</b>
+      <p class="msg" id="message"></p>
+      <button class="secondary" id="copy">Copy message</button>
+    </div>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>
