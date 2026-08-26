@@ -5,6 +5,10 @@ import {
   loadCandidateStore,
 } from "../../../lib/candidateStore";
 
+import {
+  db,
+} from "../../../lib/db";
+
 const RequestSchema = z.object({
   title: z.string().default(""),
   company: z.string().default(""),
@@ -25,7 +29,7 @@ export async function POST(req: Request) {
       await req.json()
     );
 
-    // 2. 读取用户已经上传并解析好的 Resume
+    // 2. 读取用户已经上传并保存的 Resume
     const candidateStore =
       await loadCandidateStore();
 
@@ -76,7 +80,7 @@ ${JSON.stringify(payload, null, 2)}
    - 行业/业务场景匹配度
    - 工作经验与 seniority 匹配度
    - AI / 数据 / 产品能力匹配度
-5. 匹配度不是关键词数量，而是候选人的实际经历能否完成该岗位核心工作。
+5. 匹配度不是简单关键词数量，而是候选人的实际经历能否完成该岗位核心工作。
 6. openingMessage 必须基于候选人的真实经历。
 7. openingMessage 不得声称候选人拥有 Resume 中不存在的经验。
 8. 输出全部使用中文。
@@ -158,7 +162,73 @@ ${JSON.stringify(payload, null, 2)}
       );
     }
 
-    // 7. 返回给 Chrome Extension
+    // 7. 写入 SQLite
+    const now = new Date().toISOString();
+
+    const statement = db.prepare(`
+      INSERT INTO applications (
+        company,
+        title,
+        salary,
+        location,
+        url,
+        jd,
+        score,
+        recommendation,
+        role_type,
+        greeting_message,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        @company,
+        @title,
+        @salary,
+        @location,
+        @url,
+        @jd,
+        @score,
+        @recommendation,
+        @roleType,
+        @openingMessage,
+        'ANALYZED',
+        @createdAt,
+        @updatedAt
+      )
+
+      ON CONFLICT(url)
+      DO UPDATE SET
+        company = excluded.company,
+        title = excluded.title,
+        salary = excluded.salary,
+        location = excluded.location,
+        jd = excluded.jd,
+        score = excluded.score,
+        recommendation = excluded.recommendation,
+        role_type = excluded.role_type,
+        greeting_message = excluded.greeting_message,
+        updated_at = excluded.updated_at
+    `);
+
+    statement.run({
+      company: payload.company,
+      title: payload.title,
+      salary: payload.salary,
+      location: payload.location,
+      url: payload.url || null,
+      jd: payload.jd,
+
+      score: result.score,
+      recommendation: result.recommendation,
+      roleType: result.roleType,
+      openingMessage: result.openingMessage,
+
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 8. 返回给 Chrome Extension
     return Response.json(result);
 
   } catch (error: any) {
