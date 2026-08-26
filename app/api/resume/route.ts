@@ -5,6 +5,10 @@ import {
   getDocumentProxy,
 } from "unpdf";
 
+import {
+  saveCandidateStore,
+} from "../../../lib/candidateStore";
+
 export const runtime = "nodejs";
 
 const client = new OpenAI({
@@ -61,8 +65,10 @@ async function extractResumeText(file: File) {
 
 export async function POST(req: Request) {
   try {
+    // 1. 读取上传的表单
     const formData = await req.formData();
 
+    // 2. 获取 resume 文件
     const file = formData.get("resume");
 
     if (!(file instanceof File)) {
@@ -77,6 +83,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 3. 文件大小限制：5MB
     const maxSize = 5 * 1024 * 1024;
 
     if (file.size > maxSize) {
@@ -91,7 +98,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. 提取简历文本
+    // 4. 从 PDF / DOCX / TXT 中提取纯文本
     const resumeText =
       await extractResumeText(file);
 
@@ -111,26 +118,28 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. 构造 Resume Parser Prompt
+    // 5. 构造 Candidate Profile Prompt
     const prompt = `
 你是 JobPilot 的简历解析模块。
 
-你的任务是把候选人的简历转换成结构化 Candidate Profile。
+你的任务是把候选人的原始简历转换成结构化 Candidate Profile。
 
 重要规则：
 
-1. 只能使用简历中明确存在的信息。
-2. 严禁编造任何工作经历、技能、项目、公司、职位、数据指标或职责。
-3. 不要根据常识补全候选人没有写过的经历。
-4. 如果某个字段不存在，可以返回空字符串或空数组。
-5. 尽可能保留原简历中的量化指标。
-6. skills 中只放简历明确提到，或可以从明确工作内容直接确认的技能。
-7. 所有 description 保持简洁，但保留核心业务内容、方法和结果。
-8. 最终只返回合法 JSON。
-9. 不要返回 Markdown。
-10. 不要输出 JSON 以外的任何解释。
+1. 只能使用原始简历中明确存在的信息。
+2. 严禁编造任何工作经历、技能、项目、公司、职位、时间、地点、数据指标或职责。
+3. 不要因为某项技能与候选人经历“看起来相关”就自动添加。
+4. 如果信息没有在简历中出现，返回空字符串或空数组。
+5. 尽可能完整保留原始简历中的量化指标、工具、方法、业务结果。
+6. 工作经历的 company 和 title 必须忠实于原始简历。
+7. education 必须忠实于原始简历。
+8. description 可以对原文进行简洁整理，但不得改变事实含义。
+9. summary 是对候选人背景的简洁总结，可以生成，但必须完全建立在简历事实基础上。
+10. 最终只返回合法 JSON。
+11. 不要返回 Markdown。
+12. 不要输出 JSON 之外的任何解释。
 
-请严格返回下面的数据结构：
+请严格返回以下结构：
 
 {
   "name": "",
@@ -163,7 +172,7 @@ export async function POST(req: Request) {
 ${resumeText}
 `;
 
-    // 3. 调用 OpenAI
+    // 6. 调用 OpenAI
     const response =
       await client.responses.create({
         model:
@@ -172,7 +181,7 @@ ${resumeText}
         input: prompt,
       });
 
-    // 4. 获取模型输出
+    // 7. 获取模型输出
     const rawOutput =
       response.output_text
         .trim()
@@ -181,14 +190,14 @@ ${resumeText}
         .replace(/```$/i, "")
         .trim();
 
-    // 5. 转成 JSON
+    // 8. 转成 JSON
     let profile;
 
     try {
       profile = JSON.parse(rawOutput);
     } catch {
       console.error(
-        "Invalid profile JSON:",
+        "Candidate Profile JSON 解析失败：",
         rawOutput
       );
 
@@ -204,7 +213,19 @@ ${resumeText}
       );
     }
 
-    // 6. 返回给 Chrome Extension
+    // 9. 保存 Master Resume + Candidate Profile
+    await saveCandidateStore({
+      rawResumeText: resumeText,
+
+      candidateProfile: profile,
+
+      metadata: {
+        fileName: file.name,
+        uploadedAt: new Date().toISOString(),
+      },
+    });
+
+    // 10. 返回给 Chrome Extension
     return Response.json({
       success: true,
 

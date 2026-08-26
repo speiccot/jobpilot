@@ -1,5 +1,24 @@
 const $ = (id) => document.getElementById(id);
 
+function fillSimpleList(id, items) {
+  const el = $(id);
+
+  el.innerHTML = "";
+
+  if (!items || items.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "暂无";
+    el.appendChild(li);
+    return;
+  }
+
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.textContent = item;
+    el.appendChild(li);
+  }
+}
+
 function fillList(id, items) {
   const el = $(id);
   el.innerHTML = "";
@@ -99,9 +118,60 @@ $("uploadResume").addEventListener("click", async () => {
 
     status.textContent =
   `✓ ${data.file.name} 分析完成，已生成候选人画像`;
-  
+
+  const profile = data.profile;
+
+$("profileName").textContent =
+  profile.name || "未识别";
+
+$("profileSummary").textContent =
+  profile.summary || "暂无";
+
+$("profileSkills").textContent =
+  (profile.skills || []).join(" · ") || "暂无";
+
+fillSimpleList(
+  "profileExperience",
+  (profile.experience || []).map((item) => {
+    const descriptions =
+      (item.description || []).join("；");
+
+    return `${item.title || ""} @ ${item.company || ""}${
+      descriptions ? `：${descriptions}` : ""
+    }`;
+  })
+);
+
+fillSimpleList(
+  "profileEducation",
+  (profile.education || []).map((item) => {
+    return [
+      item.school,
+      item.degree,
+      item.major,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  })
+);
+
+fillSimpleList(
+  "profileProjects",
+  (profile.projects || []).map((item) => {
+    const descriptions =
+      (item.description || []).join("；");
+
+    return `${item.name || ""}${
+      descriptions ? `：${descriptions}` : ""
+    }`;
+  })
+);
+
+$("profilePreview").style.display = "block";
+
   } catch (error) {
     status.textContent =
       `上传失败：${error.message}`;
   }
+  
 });
