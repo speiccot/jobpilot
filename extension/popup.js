@@ -64,3 +64,44 @@ $("copy").addEventListener("click", async () => {
   await navigator.clipboard.writeText($("message").textContent);
   $("copy").textContent = "Copied";
 });
+
+$("uploadResume").addEventListener("click", async () => {
+  const fileInput = $("resumeFile");
+  const status = $("resumeStatus");
+
+  const file = fileInput.files[0];
+
+  if (!file) {
+    status.textContent = "请先选择一份简历";
+    return;
+  }
+
+  status.textContent = "正在上传简历...";
+
+  try {
+    const formData = new FormData();
+
+    formData.append("resume", file);
+
+    const response = await fetch(
+      "http://localhost:3001/api/resume",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "简历上传失败");
+    }
+
+    status.textContent =
+      `✓ ${data.file.name} 上传成功`;
+
+  } catch (error) {
+    status.textContent =
+      `上传失败：${error.message}`;
+  }
+});
