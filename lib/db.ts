@@ -5,10 +5,15 @@ import fs from "fs";
 const dataDir = path.join(process.cwd(), "data");
 
 if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(dataDir, {
+    recursive: true,
+  });
 }
 
-const dbPath = path.join(dataDir, "jobpilot.db");
+const dbPath = path.join(
+  dataDir,
+  "jobpilot.db"
+);
 
 export const db = new Database(dbPath);
 
@@ -24,9 +29,17 @@ db.exec(`
 
     jd TEXT,
 
+    job_family TEXT,
+    role_type TEXT,
+    seniority TEXT,
+    industry TEXT,
+    skills TEXT,
+
     score INTEGER,
     recommendation TEXT,
-    role_type TEXT,
+
+    match_reasons TEXT,
+    risks TEXT,
 
     greeting_message TEXT,
 
