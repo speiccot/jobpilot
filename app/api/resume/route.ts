@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 import mammoth from "mammoth";
 import {
   extractText,
@@ -5,6 +6,10 @@ import {
 } from "unpdf";
 
 export const runtime = "nodejs";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 async function extractResumeText(file: File) {
   const arrayBuffer = await file.arrayBuffer();
@@ -72,7 +77,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 文件大小限制：5MB
     const maxSize = 5 * 1024 * 1024;
 
     if (file.size > maxSize) {
@@ -87,6 +91,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 1. 提取简历文本
     const resumeText =
       await extractResumeText(file);
 
@@ -106,6 +111,100 @@ export async function POST(req: Request) {
       );
     }
 
+    // 2. 构造 Resume Parser Prompt
+    const prompt = `
+你是 JobPilot 的简历解析模块。
+
+你的任务是把候选人的简历转换成结构化 Candidate Profile。
+
+重要规则：
+
+1. 只能使用简历中明确存在的信息。
+2. 严禁编造任何工作经历、技能、项目、公司、职位、数据指标或职责。
+3. 不要根据常识补全候选人没有写过的经历。
+4. 如果某个字段不存在，可以返回空字符串或空数组。
+5. 尽可能保留原简历中的量化指标。
+6. skills 中只放简历明确提到，或可以从明确工作内容直接确认的技能。
+7. 所有 description 保持简洁，但保留核心业务内容、方法和结果。
+8. 最终只返回合法 JSON。
+9. 不要返回 Markdown。
+10. 不要输出 JSON 以外的任何解释。
+
+请严格返回下面的数据结构：
+
+{
+  "name": "",
+  "summary": "",
+  "skills": [],
+  "education": [
+    {
+      "school": "",
+      "degree": "",
+      "major": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "",
+      "title": "",
+      "description": []
+    }
+  ],
+  "projects": [
+    {
+      "name": "",
+      "description": []
+    }
+  ]
+}
+
+以下是候选人的原始简历：
+
+${resumeText}
+`;
+
+    // 3. 调用 OpenAI
+    const response =
+      await client.responses.create({
+        model:
+          process.env.OPENAI_MODEL ||
+          "gpt-5-mini",
+        input: prompt,
+      });
+
+    // 4. 获取模型输出
+    const rawOutput =
+      response.output_text
+        .trim()
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/```$/i, "")
+        .trim();
+
+    // 5. 转成 JSON
+    let profile;
+
+    try {
+      profile = JSON.parse(rawOutput);
+    } catch {
+      console.error(
+        "Invalid profile JSON:",
+        rawOutput
+      );
+
+      return Response.json(
+        {
+          success: false,
+          error:
+            "AI 返回的 Candidate Profile 格式不正确",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    // 6. 返回给 Chrome Extension
     return Response.json({
       success: true,
 
@@ -117,13 +216,12 @@ export async function POST(req: Request) {
 
       textLength: resumeText.length,
 
-      // 暂时返回前 1000 个字符方便测试
-      preview: resumeText.slice(0, 1000),
+      profile,
     });
 
   } catch (error: any) {
     console.error(
-      "Resume parsing error:",
+      "Resume processing error:",
       error
     );
 
@@ -132,7 +230,7 @@ export async function POST(req: Request) {
         success: false,
         error:
           error?.message ||
-          "简历解析失败",
+          "简历处理失败",
       },
       {
         status: 500,

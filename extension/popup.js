@@ -98,8 +98,8 @@ $("uploadResume").addEventListener("click", async () => {
     }
 
     status.textContent =
-  `✓ ${data.file.name} 解析成功，共读取 ${data.textLength} 个字符`;
-
+  `✓ ${data.file.name} 分析完成，已生成候选人画像`;
+  
   } catch (error) {
     status.textContent =
       `上传失败：${error.message}`;
