@@ -98,7 +98,7 @@ $("uploadResume").addEventListener("click", async () => {
     }
 
     status.textContent =
-      `✓ ${data.file.name} 上传成功`;
+  `✓ ${data.file.name} 解析成功，共读取 ${data.textLength} 个字符`;
 
   } catch (error) {
     status.textContent =
