@@ -7,7 +7,7 @@ export const runtime =
 
 export async function GET() {
   try {
-    const statement =
+    const rows =
       db.prepare(`
         SELECT
           id,
@@ -37,15 +37,18 @@ export async function GET() {
 
           seniority,
           industry,
-          skills,
 
           score,
           recommendation,
 
-          match_reasons
-            AS matchReasons,
+          match_summary
+            AS summary,
 
-          risks,
+          top_matches
+            AS topMatches,
+
+          main_gap
+            AS mainGap,
 
           greeting_message
             AS greetingMessage,
@@ -61,30 +64,18 @@ export async function GET() {
         FROM applications
 
         ORDER BY
+          score DESC,
           created_at DESC
-      `);
-
-    const rows =
-      statement.all() as any[];
+      `).all() as any[];
 
     const applications =
       rows.map(
         (row) => ({
           ...row,
 
-          skills:
+          topMatches:
             safeParseArray(
-              row.skills
-            ),
-
-          matchReasons:
-            safeParseArray(
-              row.matchReasons
-            ),
-
-          risks:
-            safeParseArray(
-              row.risks
+              row.topMatches
             ),
         })
       );
@@ -135,6 +126,7 @@ function safeParseArray(
     )
       ? parsed
       : [];
+
   } catch {
     return [];
   }

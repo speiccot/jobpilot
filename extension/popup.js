@@ -2,36 +2,10 @@ const $ = (id) =>
   document.getElementById(id);
 
 // =========================
-// 通用列表渲染
+// List rendering
 // =========================
 
-function fillList(id, items) {
-  const el = $(id);
-
-  if (!el) return;
-
-  el.innerHTML = "";
-
-  for (const item of items || []) {
-    const li =
-      document.createElement("li");
-
-    li.textContent = item;
-
-    el.appendChild(li);
-  }
-
-  if (!items?.length) {
-    const li =
-      document.createElement("li");
-
-    li.textContent = "暂无";
-
-    el.appendChild(li);
-  }
-}
-
-function fillSimpleList(
+function fillList(
   id,
   items
 ) {
@@ -41,32 +15,47 @@ function fillSimpleList(
 
   el.innerHTML = "";
 
-  if (
-    !items ||
-    items.length === 0
-  ) {
+  if (!items?.length) {
     const li =
-      document.createElement("li");
+      document.createElement(
+        "li"
+      );
 
-    li.textContent = "暂无";
+    li.textContent =
+      "暂无";
 
     el.appendChild(li);
 
     return;
   }
 
-  for (const item of items) {
+  for (
+    const item of items
+  ) {
     const li =
-      document.createElement("li");
+      document.createElement(
+        "li"
+      );
 
-    li.textContent = item;
+    li.textContent =
+      item;
 
     el.appendChild(li);
   }
 }
 
+function fillSimpleList(
+  id,
+  items
+) {
+  fillList(
+    id,
+    items
+  );
+}
+
 // =========================
-// 获取当前标签页
+// Current tab
 // =========================
 
 async function getCurrentTab() {
@@ -82,31 +71,38 @@ async function getCurrentTab() {
     );
   }
 
+  if (
+    !tab.url ||
+    !tab.url.includes(
+      "zhipin.com"
+    )
+  ) {
+    throw new Error(
+      "请先打开 BOSS 直聘职位页面"
+    );
+  }
+
   return tab;
 }
 
 // =========================
-// 从 BOSS 当前职位读取 Job
-// 如果 content.js 没注入，就自动注入
+// 确保 content.js 存在
 // =========================
 
-async function extractCurrentJob(
+async function ensureContentScript(
   tabId
 ) {
-  let extracted;
-
   try {
-    extracted =
-      await chrome.tabs.sendMessage(
-        tabId,
-        {
-          type:
-            "JOBPILOT_EXTRACT",
-        }
-      );
-  } catch (error) {
-    // 当前页面没有 content.js
-    // 自动注入
+    await chrome.tabs.sendMessage(
+      tabId,
+      {
+        type:
+          "JOBPILOT_GET_JOB_COUNT",
+      }
+    );
+
+    return;
+  } catch {
     await chrome.scripting.executeScript({
       target: {
         tabId,
@@ -116,33 +112,47 @@ async function extractCurrentJob(
         "content.js",
       ],
     });
-
-    // 注入完成后再请求一次
-    extracted =
-      await chrome.tabs.sendMessage(
-        tabId,
-        {
-          type:
-            "JOBPILOT_EXTRACT",
-        }
-      );
   }
-
-  if (
-    !extracted ||
-    !extracted.success
-  ) {
-    throw new Error(
-      extracted?.error ||
-      "无法读取当前职位"
-    );
-  }
-
-  return extracted.job;
 }
 
 // =========================
-// 分析当前职位
+// Analyze API
+// =========================
+
+async function analyzeJob(
+  job
+) {
+  const response =
+    await fetch(
+      "http://localhost:3001/api/analyze",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body:
+          JSON.stringify(job),
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error ||
+      "职位分析失败"
+    );
+  }
+
+  return data;
+}
+
+// =========================
+// 单职位分析
 // =========================
 
 $("analyze")?.addEventListener(
@@ -165,76 +175,39 @@ $("analyze")?.addEventListener(
     }
 
     try {
-      // 1. 当前标签页
       const tab =
         await getCurrentTab();
 
-      // 2. 必须是 BOSS 页面
-      if (
-        !tab.url ||
-        !tab.url.includes(
-          "zhipin.com"
-        )
-      ) {
-        throw new Error(
-          "请先打开 BOSS 直聘职位页面"
-        );
-      }
+      await ensureContentScript(
+        tab.id
+      );
 
-      // 3. 提取当前职位
-      const job =
-        await extractCurrentJob(
-          tab.id
-        );
-
-      if (!job?.title) {
-        throw new Error(
-          "未识别到职位名称"
-        );
-      }
-
-      if (!job?.jd) {
-        throw new Error(
-          "未识别到职位描述"
-        );
-      }
-
-      if (!job?.jobId) {
-        throw new Error(
-          "未识别到岗位唯一 ID"
-        );
-      }
-
-      // 4. 发给后端分析
-      const response =
-        await fetch(
-          "http://localhost:3001/api/analyze",
+      const extracted =
+        await chrome.tabs.sendMessage(
+          tab.id,
           {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-
-            body:
-              JSON.stringify(
-                job
-              ),
+            type:
+              "JOBPILOT_EXTRACT",
           }
         );
 
-      const data =
-        await response.json();
-
-      if (!response.ok) {
+      if (
+        !extracted?.success
+      ) {
         throw new Error(
-          data.error ||
-          "职位分析失败"
+          extracted?.error ||
+          "无法读取当前职位"
         );
       }
 
-      // 5. 更新 UI
+      const job =
+        extracted.job;
+
+      const data =
+        await analyzeJob(
+          job
+        );
+
       if ($("score")) {
         $("score").textContent =
           data.score ?? 0;
@@ -273,18 +246,15 @@ $("analyze")?.addEventListener(
           "block";
       }
 
-      // 6. 状态提示
-      const companyText =
-        job.company ||
-        "公司未识别";
-
-      const contactText =
-        job.contactName ||
-        "联系人未识别";
-
       if (status) {
         status.textContent =
-          `分析完成：${companyText} · ${contactText}`;
+          `分析完成：${
+            job.company ||
+            "公司未识别"
+          } · ${
+            job.contactName ||
+            "联系人未识别"
+          }`;
       }
 
     } catch (error) {
@@ -297,14 +267,223 @@ $("analyze")?.addEventListener(
 );
 
 // =========================
-// 复制开场白
+// Batch Scan
+// =========================
+
+$("batchScan")?.addEventListener(
+  "click",
+  async () => {
+    const batchStatus =
+      $("batchStatus");
+
+    const button =
+      $("batchScan");
+
+    if (!batchStatus) {
+      return;
+    }
+
+    try {
+      button.disabled =
+        true;
+
+      const tab =
+        await getCurrentTab();
+
+      await ensureContentScript(
+        tab.id
+      );
+
+      // 获取当前列表职位数量
+      const countResult =
+        await chrome.tabs.sendMessage(
+          tab.id,
+          {
+            type:
+              "JOBPILOT_GET_JOB_COUNT",
+          }
+        );
+
+      if (
+        !countResult?.success
+      ) {
+        throw new Error(
+          "无法读取职位列表"
+        );
+      }
+
+      const requestedCount =
+  Number(
+    $("scanCount")
+      ?.value || 10
+  );
+
+if (
+  !Number.isInteger(
+    requestedCount
+  ) ||
+  requestedCount < 1
+) {
+  throw new Error(
+    "扫描数量必须是大于 0 的整数"
+  );
+}
+
+const safeRequestedCount =
+  Math.min(
+    requestedCount,
+    300
+  );
+
+const scanCount =
+  Math.min(
+    safeRequestedCount,
+    countResult.count
+  );
+
+      if (
+        scanCount === 0
+      ) {
+        throw new Error(
+          "当前页面未找到可扫描职位"
+        );
+      }
+
+      let successCount = 0;
+      let failedCount = 0;
+
+      let applyCount = 0;
+      let maybeCount = 0;
+      let skipCount = 0;
+
+      const scannedJobIds =
+        new Set();
+
+      for (
+        let index = 0;
+        index < scanCount;
+        index++
+      ) {
+        batchStatus.textContent =
+          `正在扫描 ${
+            index + 1
+          } / ${scanCount} ...`;
+
+        try {
+          // 点击职位并拿到右侧完整 Job
+          const selected =
+            await chrome.tabs.sendMessage(
+              tab.id,
+              {
+                type:
+                  "JOBPILOT_SELECT_JOB",
+
+                index,
+              }
+            );
+
+          if (
+            !selected?.success
+          ) {
+            throw new Error(
+              selected?.error ||
+              "职位读取失败"
+            );
+          }
+
+          const job =
+            selected.job;
+
+          // 当前批次内部去重
+          if (
+            scannedJobIds.has(
+              job.jobId
+            )
+          ) {
+            continue;
+          }
+
+          scannedJobIds.add(
+            job.jobId
+          );
+
+          batchStatus.textContent =
+            `正在分析 ${
+              index + 1
+            } / ${scanCount}：${
+              job.company ||
+              ""
+            } ${
+              job.title ||
+              ""
+            }`;
+
+          const analysis =
+            await analyzeJob(
+              job
+            );
+
+          successCount++;
+
+          if (
+            analysis.recommendation ===
+            "apply"
+          ) {
+            applyCount++;
+          } else if (
+            analysis.recommendation ===
+            "maybe"
+          ) {
+            maybeCount++;
+          } else {
+            skipCount++;
+          }
+
+          // 给页面一点缓冲
+          await new Promise(
+            (resolve) =>
+              setTimeout(
+                resolve,
+                400
+              )
+          );
+
+        } catch (error) {
+          console.error(
+            `扫描第 ${
+              index + 1
+            } 个职位失败：`,
+            error
+          );
+
+          failedCount++;
+        }
+      }
+
+      batchStatus.textContent =
+        `扫描完成：成功 ${successCount} 个，失败 ${failedCount} 个；建议 ${applyCount}，考虑 ${maybeCount}，跳过 ${skipCount}`;
+
+    } catch (error) {
+      batchStatus.textContent =
+        `批量扫描失败：${error.message}`;
+
+    } finally {
+      button.disabled =
+        false;
+    }
+  }
+);
+
+// =========================
+// Copy greeting
 // =========================
 
 $("copy")?.addEventListener(
   "click",
   async () => {
     const message =
-      $("message")?.textContent ||
+      $("message")
+        ?.textContent ||
       "";
 
     if (!message) {
@@ -334,7 +513,7 @@ $("copy")?.addEventListener(
 );
 
 // =========================
-// 上传 Resume
+// Resume Upload
 // =========================
 
 $("uploadResume")?.addEventListener(
@@ -346,12 +525,8 @@ $("uploadResume")?.addEventListener(
     const status =
       $("resumeStatus");
 
-    if (!fileInput) {
-      return;
-    }
-
     const file =
-      fileInput.files?.[0];
+      fileInput?.files?.[0];
 
     if (!file) {
       if (status) {
@@ -399,10 +574,6 @@ $("uploadResume")?.addEventListener(
         status.textContent =
           `✓ ${data.file.name} 分析完成，已生成候选人画像`;
       }
-
-      // =====================
-      // Candidate Profile UI
-      // =====================
 
       const profile =
         data.profile;
@@ -463,15 +634,15 @@ $("uploadResume")?.addEventListener(
         (
           profile.education ||
           []
-        ).map((item) => {
-          return [
+        ).map((item) =>
+          [
             item.school,
             item.degree,
             item.major,
           ]
             .filter(Boolean)
-            .join(" · ");
-        })
+            .join(" · ")
+        )
       );
 
       fillSimpleList(
@@ -488,7 +659,8 @@ $("uploadResume")?.addEventListener(
             ).join("；");
 
           return `${
-            item.name || ""
+            item.name ||
+            ""
           }${
             descriptions
               ? `：${descriptions}`
@@ -511,202 +683,3 @@ $("uploadResume")?.addEventListener(
     }
   }
 );
-
-// =========================
-// 临时 Debug
-// 只扫描当前职位详情
-// =========================
-
-// $("debugDom")?.addEventListener(
-//   "click",
-//   async () => {
-//     const debugResult =
-//       $("debugResult");
-
-//     if (!debugResult) {
-//       return;
-//     }
-
-//     debugResult.style.display =
-//       "block";
-
-//     debugResult.textContent =
-//       "正在扫描当前职位详情...";
-
-//     try {
-//       const tab =
-//         await getCurrentTab();
-
-//       if (
-//         !tab.url ||
-//         !tab.url.includes(
-//           "zhipin.com"
-//         )
-//       ) {
-//         throw new Error(
-//           "请先打开 BOSS 直聘职位页面"
-//         );
-//       }
-
-//       const results =
-//         await chrome.scripting.executeScript({
-//           target: {
-//             tabId: tab.id,
-//           },
-
-//           func: () => {
-//             function clean(
-//               text
-//             ) {
-//               return (
-//                 text || ""
-//               )
-//                 .replace(
-//                   /\s+/g,
-//                   " "
-//                 )
-//                 .trim();
-//             }
-
-//             const detail =
-//               document.querySelector(
-//                 ".job-detail-container"
-//               );
-
-//             if (!detail) {
-//               return {
-//                 error:
-//                   "没有找到当前职位详情区域",
-//               };
-//             }
-
-//             const items = [];
-
-//             const elements =
-//               detail.querySelectorAll(
-//                 "a, span, div, p, h1, h2, h3"
-//               );
-
-//             for (
-//               const el of elements
-//             ) {
-//               const text =
-//                 clean(
-//                   el.innerText ||
-//                   el.textContent ||
-//                   ""
-//                 );
-
-//               if (!text) {
-//                 continue;
-//               }
-
-//               if (
-//                 text.length > 100
-//               ) {
-//                 continue;
-//               }
-
-//               const className =
-//                 typeof el.className ===
-//                 "string"
-//                   ? el.className
-//                   : "";
-
-//               const href =
-//                 el.tagName === "A"
-//                   ? el.href || ""
-//                   : "";
-
-//               const dataset = {
-//                 ...el.dataset,
-//               };
-
-//               items.push({
-//                 tag:
-//                   el.tagName,
-
-//                 text,
-
-//                 className,
-
-//                 href,
-
-//                 dataset,
-//               });
-
-//               if (
-//                 items.length >=
-//                 120
-//               ) {
-//                 break;
-//               }
-//             }
-
-//             return {
-//               url:
-//                 window.location.href,
-
-//               detailClass:
-//                 detail.className,
-
-//               items,
-//             };
-//           },
-//         });
-
-//       const data =
-//         results?.[0]?.result;
-
-//       if (!data) {
-//         throw new Error(
-//           "无法读取当前职位详情"
-//         );
-//       }
-
-//       if (data.error) {
-//         throw new Error(
-//           data.error
-//         );
-//       }
-
-//       const output = [
-//         `URL：${data.url}`,
-//         "",
-//         `详情容器：${data.detailClass}`,
-//         "",
-//         "当前职位详情内部元素：",
-//         "",
-
-//         ...data.items.map(
-//           (
-//             item,
-//             index
-//           ) =>
-//             `${index + 1}.
-
-// 文本：${item.text}
-
-// 标签：${item.tag}
-
-// class：${item.className}
-
-// 链接：${item.href || "无"}
-
-// data属性：${JSON.stringify(
-//               item.dataset
-//             )}
-
-// --------------------`
-//         ),
-//       ].join("\n");
-
-//       debugResult.textContent =
-//         output;
-
-//     } catch (error) {
-//       debugResult.textContent =
-//         `扫描失败：${error.message}`;
-//     }
-//   }
-// );

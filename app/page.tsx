@@ -20,20 +20,18 @@ type Application = {
   seniority: string;
   industry: string;
 
-  skills: string[];
-
   score: number;
 
+  summary: string;
+
+  topMatches: string[];
+
+  mainGap: string;
+
   recommendation: string;
-
-  matchReasons: string[];
-  risks: string[];
-
-  greetingMessage: string;
+  url: string;
 
   status: string;
-
-  createdAt: string;
 };
 
 export default function Home() {
@@ -48,12 +46,32 @@ export default function Home() {
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] =
+    useState(true);
 
   const [
     error,
     setError,
-  ] = useState("");
+  ] =
+    useState("");
+
+  const [
+    skipThreshold,
+    setSkipThreshold,
+  ] =
+    useState(60);
+
+  const [
+    greetThreshold,
+    setGreetThreshold,
+  ] =
+    useState(80);
+
+  const [
+    settingsMessage,
+    setSettingsMessage,
+  ] =
+    useState("");
 
   async function loadApplications() {
     try {
@@ -91,366 +109,578 @@ export default function Home() {
     }
   }
 
+  async function loadSettings() {
+    try {
+      const response =
+        await fetch(
+          "/api/settings"
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        response.ok &&
+        data.settings
+      ) {
+        setSkipThreshold(
+          data.settings
+            .skipThreshold
+        );
+
+        setGreetThreshold(
+          data.settings
+            .greetThreshold
+        );
+      }
+
+    } catch {
+      // Settings 读取失败
+      // 不影响 Dashboard 主体
+    }
+  }
+
+  async function saveSettings() {
+    try {
+      setSettingsMessage(
+        "正在保存..."
+      );
+
+      const response =
+        await fetch(
+          "/api/settings",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                skipThreshold,
+                greetThreshold,
+              }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "保存失败"
+        );
+      }
+
+      setSettingsMessage(
+        "设置已保存"
+      );
+
+      await loadApplications();
+
+    } catch (error: any) {
+      setSettingsMessage(
+        error?.message ||
+        "保存失败"
+      );
+    }
+  }
+
+  async function restoreJob(
+    id: number
+  ) {
+    try {
+      const response =
+        await fetch(
+          `/api/applications/${id}/restore`,
+          {
+            method: "POST",
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "恢复失败"
+        );
+      }
+
+      await loadApplications();
+
+    } catch (error: any) {
+      alert(
+        error?.message ||
+        "恢复失败"
+      );
+    }
+  }
+
   useEffect(() => {
     loadApplications();
+    loadSettings();
   }, []);
 
-  const analyzedCount =
+  const scannedCount =
     applications.length;
 
-  const applyCount =
+  const readyCount =
     applications.filter(
       (item) =>
-        item.recommendation ===
-        "apply"
+        item.status ===
+        "READY_TO_GREET"
     ).length;
 
-  const maybeCount =
+  const poolCount =
     applications.filter(
       (item) =>
-        item.recommendation ===
-        "maybe"
+        item.status ===
+        "JOB_POOL"
     ).length;
 
-  const averageScore =
-    applications.length > 0
-      ? Math.round(
-          applications.reduce(
-            (sum, item) =>
-              sum +
-              item.score,
-            0
-          ) /
-            applications.length
-        )
-      : 0;
+  const skippedCount =
+    applications.filter(
+      (item) =>
+        item.status ===
+        "SKIPPED"
+    ).length;
 
   return (
     <main
       style={{
-        maxWidth: 1400,
+        maxWidth: 1300,
         margin:
-          "50px auto",
+          "40px auto",
         padding: 24,
       }}
     >
-      <div
+      <h1
         style={{
-          marginBottom: 32,
+          fontSize: 40,
+          marginBottom: 6,
         }}
       >
-        <h1
-          style={{
-            fontSize: 40,
-            marginBottom: 8,
-          }}
-        >
-          JobPilot
-        </h1>
+        JobPilot
+      </h1>
 
-        <p
+      <p
+        style={{
+          color: "#666",
+          marginBottom: 30,
+        }}
+      >
+        AI 求职工作流管理
+      </p>
+
+      {/* Settings */}
+
+      <section
+        style={{
+          background: "#fff",
+          padding: 20,
+          borderRadius: 16,
+          marginBottom: 24,
+
+          boxShadow:
+            "0 4px 20px rgba(0,0,0,.05)",
+        }}
+      >
+        <h2>
+          自动化设置
+        </h2>
+
+        <div
           style={{
-            color: "#666",
-            fontSize: 17,
+            display: "flex",
+            gap: 30,
+            alignItems: "end",
+            flexWrap: "wrap",
           }}
         >
-          AI 求职工作流管理
-        </p>
-      </div>
+          <label>
+            <div>
+              低于多少分自动跳过
+            </div>
+
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={
+                skipThreshold
+              }
+              onChange={(e) =>
+                setSkipThreshold(
+                  Number(
+                    e.target.value
+                  )
+                )
+              }
+              style={{
+                marginTop: 6,
+                padding: 8,
+                width: 100,
+              }}
+            />
+          </label>
+
+          <label>
+            <div>
+              达到多少分进入打招呼队列
+            </div>
+
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={
+                greetThreshold
+              }
+              onChange={(e) =>
+                setGreetThreshold(
+                  Number(
+                    e.target.value
+                  )
+                )
+              }
+              style={{
+                marginTop: 6,
+                padding: 8,
+                width: 100,
+              }}
+            />
+          </label>
+
+          <button
+            onClick={
+              saveSettings
+            }
+            style={{
+              padding:
+                "9px 18px",
+              cursor: "pointer",
+            }}
+          >
+            保存设置
+          </button>
+
+          <span>
+            {settingsMessage}
+          </span>
+        </div>
+      </section>
+
+      {/* KPIs */}
 
       <div
         style={{
           display: "grid",
 
           gridTemplateColumns:
-            "repeat(4, 1fr)",
+            "repeat(4,1fr)",
 
           gap: 16,
-          marginBottom: 32,
+
+          marginBottom: 28,
         }}
       >
         <StatCard
-          label="已分析职位"
+          label="已扫描"
           value={
-            analyzedCount
+            scannedCount
           }
         />
 
         <StatCard
-          label="建议投递"
+          label="待打招呼"
           value={
-            applyCount
+            readyCount
           }
         />
 
         <StatCard
-          label="考虑投递"
+          label="职位池"
           value={
-            maybeCount
+            poolCount
           }
         />
 
         <StatCard
-          label="平均匹配度"
+          label="已跳过"
           value={
-            averageScore
+            skippedCount
           }
         />
       </div>
 
       <div
         style={{
-          background: "#fff",
-          borderRadius: 16,
-          overflowX: "auto",
-
-          boxShadow:
-            "0 4px 20px rgba(0,0,0,.06)",
+          display: "flex",
+          justifyContent:
+            "space-between",
+          marginBottom: 16,
         }}
       >
-        <div
-          style={{
-            padding: 20,
+        <h2>
+          职位池
+        </h2>
 
-            borderBottom:
-              "1px solid #eee",
-
-            display: "flex",
-
-            justifyContent:
-              "space-between",
-
-            alignItems:
-              "center",
-          }}
+        <button
+          onClick={
+            loadApplications
+          }
         >
-          <h2
-            style={{
-              margin: 0,
-            }}
-          >
-            职位记录
-          </h2>
+          刷新
+        </button>
+      </div>
 
-          <button
-            onClick={
-              loadApplications
-            }
-            style={{
-              border: "none",
+      {loading && (
+        <p>
+          正在加载...
+        </p>
+      )}
 
-              padding:
-                "8px 14px",
+      {error && (
+        <p>
+          {error}
+        </p>
+      )}
 
-              borderRadius: 8,
+      <div
+        style={{
+          display: "grid",
+          gap: 16,
+        }}
+      >
+        {applications.map(
+          (job) => (
+            <JobCard
+              key={job.id}
+              job={job}
 
-              cursor:
-                "pointer",
-            }}
-          >
-            刷新
-          </button>
-        </div>
-
-        {loading && (
-          <div
-            style={{
-              padding: 30,
-            }}
-          >
-            正在加载...
-          </div>
+              onRestore={() =>
+                restoreJob(
+                  job.id
+                )
+              }
+            />
+          )
         )}
-
-        {error && (
-          <div
-            style={{
-              padding: 30,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {!loading &&
-          !error &&
-          applications.length ===
-            0 && (
-            <div
-              style={{
-                padding: 30,
-                color: "#666",
-              }}
-            >
-              暂无职位记录
-            </div>
-          )}
-
-        {!loading &&
-          applications.length >
-            0 && (
-            <table
-              style={{
-                width: "100%",
-
-                minWidth: 1200,
-
-                borderCollapse:
-                  "collapse",
-              }}
-            >
-              <thead>
-                <tr>
-                  <Th>公司</Th>
-
-                  <Th>
-                    联系人
-                  </Th>
-
-                  <Th>职位</Th>
-
-                  <Th>
-                    职位类别
-                  </Th>
-
-                  <Th>行业</Th>
-
-                  <Th>
-                    Seniority
-                  </Th>
-
-                  <Th>
-                    匹配度
-                  </Th>
-
-                  <Th>推荐</Th>
-
-                  <Th>状态</Th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {applications.map(
-                  (item) => (
-                    <tr
-                      key={
-                        item.id
-                      }
-
-                      style={{
-                        borderTop:
-                          "1px solid #eee",
-                      }}
-                    >
-                      <Td>
-                        {item.company ||
-                          "未识别"}
-                      </Td>
-
-                      <Td>
-                        {item.contactName ||
-                          "未识别"}
-                      </Td>
-
-                      <Td>
-                        <div
-                          style={{
-                            fontWeight:
-                              600,
-                          }}
-                        >
-                          {
-                            item.title
-                          }
-                        </div>
-
-                        {item.salary && (
-                          <div
-                            style={{
-                              color:
-                                "#666",
-
-                              fontSize:
-                                12,
-
-                              marginTop:
-                                4,
-                            }}
-                          >
-                            {
-                              item.salary
-                            }
-                          </div>
-                        )}
-                      </Td>
-
-                      <Td>
-                        <div>
-                          {
-                            item.roleType
-                          }
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize:
-                              12,
-
-                            color:
-                              "#777",
-
-                            marginTop:
-                              4,
-                          }}
-                        >
-                          {
-                            item.jobFamily
-                          }
-                        </div>
-                      </Td>
-
-                      <Td>
-                        {
-                          item.industry
-                        }
-                      </Td>
-
-                      <Td>
-                        {
-                          item.seniority
-                        }
-                      </Td>
-
-                      <Td>
-                        <strong>
-                          {
-                            item.score
-                          }
-                        </strong>
-                        /100
-                      </Td>
-
-                      <Td>
-                        <RecommendationBadge
-                          value={
-                            item.recommendation
-                          }
-                        />
-                      </Td>
-
-                      <Td>
-                        {
-                          item.status
-                        }
-                      </Td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
-          )}
       </div>
     </main>
+  );
+}
+
+function JobCard({
+  job,
+  onRestore,
+}: {
+  job: Application;
+  onRestore: () => void;
+}) {
+  return (
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: 16,
+        padding: 20,
+
+        boxShadow:
+          "0 4px 16px rgba(0,0,0,.05)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+
+          justifyContent:
+            "space-between",
+
+          gap: 20,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#777",
+            }}
+          >
+            {job.company ||
+              "公司未识别"}
+
+            {" · "}
+
+            {job.contactName ||
+              "联系人未识别"}
+          </div>
+
+          <h3
+            style={{
+              margin:
+                "7px 0",
+            }}
+          >
+            {job.title}
+          </h3>
+
+          <div
+            style={{
+              color: "#666",
+            }}
+          >
+            {job.salary}
+
+            {job.location
+              ? ` · ${job.location}`
+              : ""}
+          </div>
+        </div>
+
+        <div
+          style={{
+            textAlign:
+              "right",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 32,
+              fontWeight: 700,
+            }}
+          >
+            {job.score}
+          </div>
+
+          <div>
+            / 100
+          </div>
+
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 12,
+            }}
+          >
+            {translateStatus(
+              job.status
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 18,
+        }}
+      >
+        <strong>
+          适配分析
+        </strong>
+
+        <p
+          style={{
+            lineHeight: 1.6,
+          }}
+        >
+          {job.summary ||
+            "暂无分析"}
+        </p>
+      </div>
+
+      <div>
+        <strong>
+          核心匹配
+        </strong>
+
+        <ul>
+          {job.topMatches
+            ?.length >
+          0 ? (
+            job.topMatches.map(
+              (
+                item,
+                index
+              ) => (
+                <li key={index}>
+                  {item}
+                </li>
+              )
+            )
+          ) : (
+            <li>
+              暂无
+            </li>
+          )}
+        </ul>
+      </div>
+
+      {job.mainGap && (
+        <div>
+          <strong>
+            主要缺口
+          </strong>
+
+          <p>
+            {job.mainGap}
+          </p>
+        </div>
+      )}
+
+      <div
+        style={{
+          fontSize: 13,
+          color: "#777",
+          marginTop: 12,
+        }}
+      >
+        {job.roleType}
+        {" · "}
+        {job.industry}
+        {" · "}
+        {job.seniority}
+      </div>
+      {job.url && (
+  <a
+    href={job.url}
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{
+      display: "inline-block",
+      marginTop: 16,
+      marginRight: 10,
+      padding: "8px 14px",
+      border: "1px solid #ddd",
+      borderRadius: 8,
+      textDecoration: "none",
+      color: "#222",
+    }}
+  >
+    查看原职位
+  </a>
+)}
+      {job.status ===
+        "SKIPPED" && (
+        <button
+          onClick={
+            onRestore
+          }
+          style={{
+            marginTop: 16,
+            padding:
+              "8px 14px",
+            cursor: "pointer",
+          }}
+        >
+          恢复到职位池
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -459,28 +689,22 @@ function StatCard({
   value,
 }: {
   label: string;
-
-  value:
-    | number
-    | string;
+  value: number;
 }) {
   return (
     <div
       style={{
         background: "#fff",
-
         borderRadius: 14,
-
         padding: 20,
 
         boxShadow:
-          "0 4px 20px rgba(0,0,0,.05)",
+          "0 4px 16px rgba(0,0,0,.05)",
       }}
     >
       <div
         style={{
           color: "#777",
-          fontSize: 14,
         }}
       >
         {label}
@@ -488,11 +712,9 @@ function StatCard({
 
       <div
         style={{
-          fontSize: 32,
-
+          fontSize: 30,
           fontWeight: 700,
-
-          marginTop: 8,
+          marginTop: 6,
         }}
       >
         {value}
@@ -501,97 +723,36 @@ function StatCard({
   );
 }
 
-function Th({
-  children,
-}: {
-  children:
-    React.ReactNode;
-}) {
-  return (
-    <th
-      style={{
-        textAlign: "left",
-
-        padding: 14,
-
-        fontSize: 13,
-
-        color: "#666",
-
-        background:
-          "#fafafa",
-
-        whiteSpace:
-          "nowrap",
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-}: {
-  children:
-    React.ReactNode;
-}) {
-  return (
-    <td
-      style={{
-        padding: 14,
-
-        verticalAlign:
-          "top",
-
-        fontSize: 14,
-      }}
-    >
-      {children}
-    </td>
-  );
-}
-
-function RecommendationBadge({
-  value,
-}: {
-  value: string;
-}) {
-  let text = value;
-
+function translateStatus(
+  status: string
+) {
   if (
-    value === "apply"
+    status ===
+    "READY_TO_GREET"
   ) {
-    text = "建议";
+    return "待打招呼";
   }
 
   if (
-    value === "maybe"
+    status ===
+    "JOB_POOL"
   ) {
-    text = "考虑";
+    return "职位池";
   }
 
   if (
-    value === "skip"
+    status ===
+    "SKIPPED"
   ) {
-    text = "跳过";
+    return "已跳过";
   }
 
-  return (
-    <span
-      style={{
-        padding:
-          "4px 8px",
+  if (
+    status ===
+    "GREETING_SENT"
+  ) {
+    return "已打招呼";
+  }
 
-        borderRadius: 999,
-
-        background:
-          "#eee",
-
-        fontSize: 12,
-      }}
-    >
-      {text}
-    </span>
-  );
+  return status;
 }
