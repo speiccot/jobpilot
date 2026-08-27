@@ -2,70 +2,99 @@ import {
   db,
 } from "../../../lib/db";
 
-export const runtime = "nodejs";
+export const runtime =
+  "nodejs";
 
 export async function GET() {
   try {
-    const statement = db.prepare(`
-      SELECT
-        id,
+    const statement =
+      db.prepare(`
+        SELECT
+          id,
 
-        company,
-        title,
-        salary,
-        location,
-        url,
+          job_id
+            AS jobId,
 
-        job_family AS jobFamily,
-        role_type AS roleType,
-        seniority,
-        industry,
-        skills,
+          company,
 
-        score,
-        recommendation,
+          contact_name
+            AS contactName,
 
-        match_reasons AS matchReasons,
-        risks,
+          recruiter_title
+            AS recruiterTitle,
 
-        greeting_message AS greetingMessage,
+          title,
+          salary,
+          location,
+          address,
+          url,
 
-        status,
+          job_family
+            AS jobFamily,
 
-        created_at AS createdAt,
-        updated_at AS updatedAt
+          role_type
+            AS roleType,
 
-      FROM applications
+          seniority,
+          industry,
+          skills,
 
-      ORDER BY created_at DESC
-    `);
+          score,
+          recommendation,
+
+          match_reasons
+            AS matchReasons,
+
+          risks,
+
+          greeting_message
+            AS greetingMessage,
+
+          status,
+
+          created_at
+            AS createdAt,
+
+          updated_at
+            AS updatedAt
+
+        FROM applications
+
+        ORDER BY
+          created_at DESC
+      `);
 
     const rows =
       statement.all() as any[];
 
     const applications =
-      rows.map((row) => ({
-        ...row,
+      rows.map(
+        (row) => ({
+          ...row,
 
-        skills:
-          safeParseArray(
-            row.skills
-          ),
+          skills:
+            safeParseArray(
+              row.skills
+            ),
 
-        matchReasons:
-          safeParseArray(
-            row.matchReasons
-          ),
+          matchReasons:
+            safeParseArray(
+              row.matchReasons
+            ),
 
-        risks:
-          safeParseArray(
-            row.risks
-          ),
-      }));
+          risks:
+            safeParseArray(
+              row.risks
+            ),
+        })
+      );
 
     return Response.json({
       success: true,
-      count: applications.length,
+
+      count:
+        applications.length,
+
       applications,
     });
 
@@ -78,6 +107,7 @@ export async function GET() {
     return Response.json(
       {
         success: false,
+
         error:
           error?.message ||
           "读取职位记录失败",
@@ -100,7 +130,9 @@ function safeParseArray(
     const parsed =
       JSON.parse(value);
 
-    return Array.isArray(parsed)
+    return Array.isArray(
+      parsed
+    )
       ? parsed
       : [];
   } catch {

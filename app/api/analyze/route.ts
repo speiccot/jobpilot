@@ -10,26 +10,38 @@ import {
 } from "../../../lib/db";
 
 const RequestSchema = z.object({
+  jobId: z.string().min(1),
+
   title: z.string().default(""),
   company: z.string().default(""),
+  contactName: z.string().default(""),
+  recruiterTitle: z.string().default(""),
+
   salary: z.string().default(""),
   location: z.string().default(""),
+  address: z.string().default(""),
+
   jd: z.string().min(20),
-  url: z.string().optional(),
+
+  url: z.string().default(""),
 });
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey:
+    process.env.OPENAI_API_KEY,
 });
 
-export async function POST(req: Request) {
+export async function POST(
+  req: Request
+) {
   try {
-    // 1. 读取当前职位
-    const payload = RequestSchema.parse(
-      await req.json()
-    );
+    // 1. 当前职位
+    const payload =
+      RequestSchema.parse(
+        await req.json()
+      );
 
-    // 2. 读取候选人的 Master Resume
+    // 2. Candidate Resume
     const candidateStore =
       await loadCandidateStore();
 
@@ -50,249 +62,198 @@ export async function POST(req: Request) {
       candidateProfile,
     } = candidateStore;
 
-    // 3. 通用职位理解 + 通用匹配 Prompt
+    // 3. 通用 Job Intelligence + Matching
     const prompt = `
 你是 JobPilot 的 Job Intelligence 与 Candidate Matching 模块。
 
-JobPilot 是一个通用求职产品。
+JobPilot 是一个面向任何职业和行业的通用求职产品。
 
-它必须能够处理任何职业和行业的职位，
-包括但不限于：
+不要假设候选人一定属于互联网、AI、数据或产品行业。
 
-产品
-工程
-软件开发
-数据
-算法
-人工智能
-财务
-会计
-金融
-咨询
-销售
-商务拓展
-市场营销
-运营
-供应链
-物流
-人力资源
-行政
-设计
-建筑
-制造
-机械
-电子
-教育
-医疗
-医药
-零售
-餐饮
-以及其他任何职业。
+========================
+职位信息
+========================
 
-不要假设候选人一定从事互联网、AI、产品或数据相关工作。
+${JSON.stringify(
+  payload,
+  null,
+  2
+)}
 
-你的任务分为两个阶段。
+========================
+候选人结构化画像
+========================
 
-================================
-第一阶段：理解职位
-================================
+${JSON.stringify(
+  candidateProfile,
+  null,
+  2
+)}
 
-根据职位标题和 JD，识别：
-
-1. jobFamily
-   职位所属的大类。
-
-   例如：
-   Engineering
-   Product
-   Data
-   Finance
-   Accounting
-   Sales
-   Marketing
-   Operations
-   Strategy
-   Consulting
-   Human Resources
-   Design
-   Supply Chain
-   Legal
-   Healthcare
-   Education
-   Manufacturing
-   Administration
-   Customer Service
-   Other
-
-   可以根据实际职位生成合理的大类，
-   不需要强行限制在上述示例中。
-
-2. roleType
-
-   标准化、具体的职位名称。
-
-   例如：
-   Frontend Engineer
-   AI Product Manager
-   Financial Analyst
-   Accountant
-   Medical Sales Representative
-   Operations Manager
-   Mechanical Engineer
-
-   roleType 不允许根据候选人的背景决定。
-
-   它描述的是：
-   “这个职位本身是什么”。
-
-3. seniority
-
-   根据职位要求判断：
-
-   Intern
-   Entry-level
-   Junior
-   Mid-level
-   Senior
-   Lead
-   Manager
-   Director
-   Executive
-   Unknown
-
-4. industry
-
-   判断职位对应的主要行业。
-
-   如果 JD 无法明确判断，
-   返回 "Unknown"。
-
-5. requiredSkills
-
-   提取完成这份工作的主要技能、知识、工具、
-   资质或能力要求。
-
-   不要只提取技术技能。
-
-   例如销售岗位可能包括：
-   客户开发
-   商务谈判
-   客户关系管理
-
-   会计岗位可能包括：
-   Financial Reporting
-   GAAP
-   Excel
-   Reconciliation
-
-================================
-第二阶段：Candidate Match
-================================
-
-候选人结构化画像：
-
-${JSON.stringify(candidateProfile, null, 2)}
-
-候选人原始 Resume：
+========================
+候选人原始 Resume
+========================
 
 ${rawResumeText}
 
-当前职位：
+========================
+第一阶段：理解职位
+========================
 
-${JSON.stringify(payload, null, 2)}
+判断：
 
-判断 Candidate 与 Job 的匹配度。
+1. jobFamily
 
-核心规则：
+职位所属的大类。
 
-1. 必须基于真实 Resume。
+根据真实职位生成合理分类。
+
+例如：
+
+Engineering
+Product
+Data
+Finance
+Accounting
+Sales
+Marketing
+Operations
+Strategy
+Consulting
+Human Resources
+Design
+Supply Chain
+Legal
+Healthcare
+Education
+Manufacturing
+Administration
+Customer Service
+
+但不要被示例限制。
+
+2. roleType
+
+标准化、具体的职位名称。
+
+roleType 描述职位本身，
+不能根据候选人的背景改变。
+
+3. seniority
+
+可使用：
+
+Intern
+Entry-level
+Junior
+Mid-level
+Senior
+Lead
+Manager
+Director
+Executive
+Unknown
+
+4. industry
+
+判断主要行业。
+
+无法判断时返回：
+
+Unknown
+
+5. requiredSkills
+
+提取完成岗位核心工作的主要：
+
+技能
+知识
+工具
+资质
+能力
+
+不能只关注技术技能。
+
+========================
+第二阶段：Candidate Match
+========================
+
+规则：
+
+1. 所有判断必须基于候选人的真实 Resume。
 
 2. 严禁编造候选人不存在的：
 
-   工作经历
-   技能
-   项目
-   工具
-   行业经验
-   证书
-   学历
-   职责
-   成果
+工作经历
+技能
+项目
+工具
+行业经验
+证书
+学历
+职责
+成果
 
-3. 不要因为候选人与 JD 出现相似关键词，
-   就认为候选人具备该能力。
+3. 必须从 Resume 中找到合理证据支持匹配。
 
-必须能够从 Resume 中找到合理证据。
+4. 如果岗位的重要要求在 Resume 中没有证据，
+必须放进 risks。
 
-4. 如果岗位要求某项重要能力，
-   但 Resume 中没有证据，
-   必须放进 risks。
-
-5. 匹配判断必须适用于任何职业。
-
-不要使用固定的：
-
-AI能力
-产品能力
-数据能力
-工程能力
-
-作为所有职位的统一评价框架。
-
-而是根据当前职位本身的要求，
-动态判断 Candidate 是否满足。
+5. 根据当前岗位动态判断。
 
 重点考虑：
 
-- 核心工作职责
-- Required Skills
-- Preferred Skills
-- 工作经验
-- Seniority
-- Industry Experience
-- Education
-- Certifications
-- Transferable Skills
-- Candidate 成果与岗位要求之间的证据关系
+核心职责
+Required Skills
+Preferred Skills
+工作经验
+Seniority
+Industry Experience
+Education
+Certifications
+Transferable Skills
+候选人成果
 
-6. score：
+6. score 为 0-100。
 
-0-100。
-
-高分意味着：
-
-候选人的真实经历能够较直接地支持
-完成这个岗位最重要的职责。
+高分代表候选人的真实经历能够直接支持完成该岗位最重要职责。
 
 7. recommendation：
 
-apply：
+apply
 整体匹配度高，值得申请。
 
-maybe：
+maybe
 存在一定匹配，但有明显 gap。
 
-skip：
+skip
 核心职责或关键要求明显不匹配。
 
-8. greetingMessage：
+8. openingMessage
 
 用于招聘平台首次打招呼。
 
 要求：
 
-- 中文
-- 自然
-- 简短
-- 针对当前职位
-- 使用 Resume 中最相关的真实经历
-- 不得编造经历
-- 不要写得像求职信
-- 尽量控制在 100 个中文字符左右
+中文
+自然
+简短
+针对当前岗位
+引用最相关的真实经历
+不得编造经历
+不要写成长求职信
+尽量控制在约100个中文字符
 
-================================
+招聘联系人：
+
+${payload.contactName || "未知"}
+
+如果联系人姓名存在，可以自然称呼。
+如果为空，直接使用“您好”。
+
+========================
 输出
-================================
+========================
 
 只返回合法 JSON：
 
@@ -319,40 +280,49 @@ skip：
 
 要求：
 
-reasons：
-正好 3 条。
+reasons 正好3条。
 
-risks：
-0-3 条。
+risks 0-3条。
 
 不要输出 Markdown。
 
 不要输出 JSON 以外的内容。
 `;
 
-    // 4. 调用 OpenAI
+    // 4. OpenAI
     const response =
       await client.responses.create({
         model:
           process.env.OPENAI_MODEL ||
           "gpt-5-mini",
+
         input: prompt,
       });
 
-    // 5. 清理模型输出
+    // 5. 清洗输出
     const rawOutput =
       response.output_text
         .trim()
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/```$/i, "")
+        .replace(
+          /^```json\s*/i,
+          ""
+        )
+        .replace(
+          /^```\s*/i,
+          ""
+        )
+        .replace(
+          /```$/i,
+          ""
+        )
         .trim();
 
     // 6. JSON Parse
     let result;
 
     try {
-      result = JSON.parse(rawOutput);
+      result =
+        JSON.parse(rawOutput);
     } catch {
       console.error(
         "职位分析 JSON 解析失败：",
@@ -372,7 +342,8 @@ risks：
 
     // 7. 基础校验
     if (
-      typeof result.score !== "number"
+      typeof result.score !==
+      "number"
     ) {
       result.score = 0;
     }
@@ -381,7 +352,9 @@ risks：
       0,
       Math.min(
         100,
-        Math.round(result.score)
+        Math.round(
+          result.score
+        )
       )
     );
 
@@ -396,7 +369,8 @@ risks：
         result.recommendation
       )
     ) {
-      result.recommendation = "maybe";
+      result.recommendation =
+        "maybe";
     }
 
     if (
@@ -404,14 +378,23 @@ risks：
         result.requiredSkills
       )
     ) {
-      result.requiredSkills = [];
+      result.requiredSkills =
+        [];
     }
 
-    if (!Array.isArray(result.reasons)) {
+    if (
+      !Array.isArray(
+        result.reasons
+      )
+    ) {
       result.reasons = [];
     }
 
-    if (!Array.isArray(result.risks)) {
+    if (
+      !Array.isArray(
+        result.risks
+      )
+    ) {
       result.risks = [];
     }
 
@@ -419,89 +402,152 @@ risks：
     const now =
       new Date().toISOString();
 
-    const statement = db.prepare(`
-      INSERT INTO applications (
-        company,
-        title,
-        salary,
-        location,
-        url,
-        jd,
+    const statement =
+      db.prepare(`
+        INSERT INTO applications (
+          job_id,
 
-        job_family,
-        role_type,
-        seniority,
-        industry,
-        skills,
+          company,
+          contact_name,
+          recruiter_title,
 
-        score,
-        recommendation,
+          title,
+          salary,
+          location,
+          address,
+          url,
 
-        match_reasons,
-        risks,
+          jd,
 
-        greeting_message,
-        status,
+          job_family,
+          role_type,
+          seniority,
+          industry,
+          skills,
 
-        created_at,
-        updated_at
-      )
+          score,
+          recommendation,
 
-      VALUES (
-        @company,
-        @title,
-        @salary,
-        @location,
-        @url,
-        @jd,
+          match_reasons,
+          risks,
 
-        @jobFamily,
-        @roleType,
-        @seniority,
-        @industry,
-        @skills,
+          greeting_message,
+          status,
 
-        @score,
-        @recommendation,
+          created_at,
+          updated_at
+        )
 
-        @matchReasons,
-        @risks,
+        VALUES (
+          @jobId,
 
-        @openingMessage,
-        'ANALYZED',
+          @company,
+          @contactName,
+          @recruiterTitle,
 
-        @createdAt,
-        @updatedAt
-      )
+          @title,
+          @salary,
+          @location,
+          @address,
+          @url,
 
-      ON CONFLICT(url)
+          @jd,
 
-      DO UPDATE SET
-        company = excluded.company,
-        title = excluded.title,
-        salary = excluded.salary,
-        location = excluded.location,
-        jd = excluded.jd,
+          @jobFamily,
+          @roleType,
+          @seniority,
+          @industry,
+          @skills,
 
-        job_family = excluded.job_family,
-        role_type = excluded.role_type,
-        seniority = excluded.seniority,
-        industry = excluded.industry,
-        skills = excluded.skills,
+          @score,
+          @recommendation,
 
-        score = excluded.score,
-        recommendation = excluded.recommendation,
+          @matchReasons,
+          @risks,
 
-        match_reasons = excluded.match_reasons,
-        risks = excluded.risks,
+          @openingMessage,
+          'ANALYZED',
 
-        greeting_message = excluded.greeting_message,
-        updated_at = excluded.updated_at
-    `);
+          @createdAt,
+          @updatedAt
+        )
+
+        ON CONFLICT(job_id)
+
+        DO UPDATE SET
+          company =
+            excluded.company,
+
+          contact_name =
+            excluded.contact_name,
+
+          recruiter_title =
+            excluded.recruiter_title,
+
+          title =
+            excluded.title,
+
+          salary =
+            excluded.salary,
+
+          location =
+            excluded.location,
+
+          address =
+            excluded.address,
+
+          url =
+            excluded.url,
+
+          jd =
+            excluded.jd,
+
+          job_family =
+            excluded.job_family,
+
+          role_type =
+            excluded.role_type,
+
+          seniority =
+            excluded.seniority,
+
+          industry =
+            excluded.industry,
+
+          skills =
+            excluded.skills,
+
+          score =
+            excluded.score,
+
+          recommendation =
+            excluded.recommendation,
+
+          match_reasons =
+            excluded.match_reasons,
+
+          risks =
+            excluded.risks,
+
+          greeting_message =
+            excluded.greeting_message,
+
+          updated_at =
+            excluded.updated_at
+      `);
 
     statement.run({
+      jobId:
+        payload.jobId,
+
       company:
         payload.company || "",
+
+      contactName:
+        payload.contactName || "",
+
+      recruiterTitle:
+        payload.recruiterTitle || "",
 
       title:
         payload.title || "",
@@ -512,23 +558,30 @@ risks：
       location:
         payload.location || "",
 
+      address:
+        payload.address || "",
+
       url:
-        payload.url || null,
+        payload.url || "",
 
       jd:
         payload.jd,
 
       jobFamily:
-        result.jobFamily || "Other",
+        result.jobFamily ||
+        "Other",
 
       roleType:
-        result.roleType || payload.title,
+        result.roleType ||
+        payload.title,
 
       seniority:
-        result.seniority || "Unknown",
+        result.seniority ||
+        "Unknown",
 
       industry:
-        result.industry || "Unknown",
+        result.industry ||
+        "Unknown",
 
       skills:
         JSON.stringify(
@@ -552,7 +605,8 @@ risks：
         ),
 
       openingMessage:
-        result.openingMessage || "",
+        result.openingMessage ||
+        "",
 
       createdAt:
         now,
@@ -561,8 +615,10 @@ risks：
         now,
     });
 
-    // 9. 返回给 Chrome Extension
-    return Response.json(result);
+    // 9. 返回 Extension
+    return Response.json(
+      result
+    );
 
   } catch (error: any) {
     console.error(
