@@ -9,13 +9,42 @@ function textWithin(root, selector) {
     return "";
   }
 
-  const el = root.querySelector(selector);
+  const el =
+    root.querySelector(selector);
 
   return clean(
     el?.innerText ||
-    el?.textContent ||
-    ""
+      el?.textContent ||
+      ""
   );
+}
+
+// =========================
+// BOSS 薪资字体解码
+// =========================
+
+function decodeBossSalary(text) {
+  const salaryMap = {
+    "\uE031": "0",
+    "\uE032": "1",
+    "\uE033": "2",
+    "\uE034": "3",
+    "\uE035": "4",
+    "\uE036": "5",
+    "\uE037": "6",
+    "\uE038": "7",
+    "\uE039": "8",
+    "\uE03A": "9",
+  };
+
+  return clean(text)
+    .split("")
+    .map(
+      (char) =>
+        salaryMap[char] ??
+        char
+    )
+    .join("");
 }
 
 // =========================
@@ -32,29 +61,49 @@ function extractContactName(detail) {
     return "";
   }
 
-  // BOSS 可能出现：
+  // 例如：
   // 朱女士 在线
   // 朱女士 刚刚活跃
   // 朱女士 今日活跃
   // 朱女士 3小时前活跃
-  // 朱女士 本月活跃
 
   name = name
     .replace(/\s*在线\s*$/i, "")
-    .replace(/\s*刚刚活跃\s*$/i, "")
-    .replace(/\s*今日活跃\s*$/i, "")
-    .replace(/\s*本周活跃\s*$/i, "")
-    .replace(/\s*本月活跃\s*$/i, "")
-    .replace(/\s*\d+\s*分钟前活跃\s*$/i, "")
-    .replace(/\s*\d+\s*小时前活跃\s*$/i, "")
-    .replace(/\s*\d+\s*天前活跃\s*$/i, "")
+    .replace(
+      /\s*刚刚活跃\s*$/i,
+      ""
+    )
+    .replace(
+      /\s*今日活跃\s*$/i,
+      ""
+    )
+    .replace(
+      /\s*本周活跃\s*$/i,
+      ""
+    )
+    .replace(
+      /\s*本月活跃\s*$/i,
+      ""
+    )
+    .replace(
+      /\s*\d+\s*分钟前活跃\s*$/i,
+      ""
+    )
+    .replace(
+      /\s*\d+\s*小时前活跃\s*$/i,
+      ""
+    )
+    .replace(
+      /\s*\d+\s*天前活跃\s*$/i,
+      ""
+    )
     .trim();
 
   return name;
 }
 
 // =========================
-// 公司 + Recruiter Title
+// 公司 + 招聘者职位
 // =========================
 
 function extractBossInfo(detail) {
@@ -70,8 +119,7 @@ function extractBossInfo(detail) {
     };
   }
 
-  // 当前 BOSS 格式示例：
-  //
+  // 示例：
   // 百度 · 百度hr
   // 快手 · HR-招聘
 
@@ -87,7 +135,9 @@ function extractBossInfo(detail) {
       parts[0] || "",
 
     recruiterTitle:
-      parts.slice(1).join(" · ") ||
+      parts
+        .slice(1)
+        .join(" · ") ||
       "",
   };
 }
@@ -96,7 +146,9 @@ function extractBossInfo(detail) {
 // Job ID + 真实 Job URL
 // =========================
 
-function extractJobIdentity(detail) {
+function extractJobIdentity(
+  detail
+) {
   const moreJobLink =
     detail.querySelector(
       "a.more-job-btn"
@@ -113,9 +165,10 @@ function extractJobIdentity(detail) {
     };
   }
 
-  const match = href.match(
-    /\/job_detail\/([^/?]+)\.html/
-  );
+  const match =
+    href.match(
+      /\/job_detail\/([^/?]+)\.html/
+    );
 
   return {
     jobId:
@@ -139,8 +192,7 @@ function extractSalary(detail) {
     return "";
   }
 
-  // 先尝试 HTML attribute。
-  // 有些网站会在 aria-label/title 里保留正常文字。
+  // 先检查有没有正常文字属性
   const ariaLabel = clean(
     salaryElement.getAttribute(
       "aria-label"
@@ -148,7 +200,9 @@ function extractSalary(detail) {
   );
 
   if (ariaLabel) {
-    return ariaLabel;
+    return decodeBossSalary(
+      ariaLabel
+    );
   }
 
   const title = clean(
@@ -158,21 +212,25 @@ function extractSalary(detail) {
   );
 
   if (title) {
-    return title;
+    return decodeBossSalary(
+      title
+    );
   }
 
-  // 普通 DOM text。
-  // BOSS 某些页面会通过自定义字体显示数字，
-  // 此时这里仍可能得到 PUA 字符。
-  return clean(
+  // DOM 中的自定义字体字符
+  const rawSalary = clean(
     salaryElement.innerText ||
-    salaryElement.textContent ||
-    ""
+      salaryElement.textContent ||
+      ""
+  );
+
+  return decodeBossSalary(
+    rawSalary
   );
 }
 
 // =========================
-// Location
+// 城市
 // =========================
 
 function extractLocation(detail) {
@@ -185,8 +243,6 @@ function extractLocation(detail) {
     return "";
   }
 
-  // 当前 DOM 中第一个城市链接：
-  // https://www.zhipin.com/c101010100/
   const links =
     header.querySelectorAll("a");
 
@@ -195,8 +251,14 @@ function extractLocation(detail) {
       link.href || "";
 
     const text =
-      clean(link.innerText);
+      clean(
+        link.innerText ||
+          link.textContent ||
+          ""
+      );
 
+    // 当前 BOSS 城市链接类似：
+    // /c101010100/
     if (
       text &&
       href.includes(
@@ -211,10 +273,23 @@ function extractLocation(detail) {
 }
 
 // =========================
+// 工作地址
+// =========================
+
+function extractAddress(detail) {
+  return textWithin(
+    detail,
+    ".job-address-desc"
+  );
+}
+
+// =========================
 // JD
 // =========================
 
-function extractJobDescription(detail) {
+function extractJobDescription(
+  detail
+) {
   const body =
     detail.querySelector(
       ".job-detail-body"
@@ -222,25 +297,27 @@ function extractJobDescription(detail) {
 
   if (!body) {
     return clean(
-      detail.innerText
+      detail.innerText ||
+        detail.textContent ||
+        ""
     ).slice(0, 12000);
   }
 
   return clean(
     body.innerText ||
-    body.textContent ||
-    ""
+      body.textContent ||
+      ""
   ).slice(0, 12000);
 }
 
 // =========================
-// 当前职位
+// 当前职位提取
 // =========================
 
 function extractCurrentJob() {
-  // 最重要：
-  // 永远只读取右侧当前职位，
-  // 不扫描左侧职位列表。
+  // 最关键：
+  // 只读取右侧当前打开的职位详情，
+  // 不碰左侧职位列表。
 
   const detail =
     document.querySelector(
@@ -253,6 +330,16 @@ function extractCurrentJob() {
     );
   }
 
+  // 1. Job Identity
+  const {
+    jobId,
+    jobUrl,
+  } =
+    extractJobIdentity(
+      detail
+    );
+
+  // 2. 基础字段
   const title =
     textWithin(
       detail,
@@ -266,10 +353,7 @@ function extractCurrentJob() {
     extractLocation(detail);
 
   const address =
-    textWithin(
-      detail,
-      ".job-address-desc"
-    );
+    extractAddress(detail);
 
   const contactName =
     extractContactName(
@@ -280,13 +364,7 @@ function extractCurrentJob() {
     company,
     recruiterTitle,
   } =
-    extractBossInfo(detail);
-
-  const {
-    jobId,
-    jobUrl,
-  } =
-    extractJobIdentity(
+    extractBossInfo(
       detail
     );
 
@@ -295,6 +373,7 @@ function extractCurrentJob() {
       detail
     );
 
+  // 3. 必要字段检查
   if (!title) {
     throw new Error(
       "未识别到职位名称"
@@ -313,6 +392,7 @@ function extractCurrentJob() {
     );
   }
 
+  // 4. 返回标准 Job Object
   return {
     jobId,
 
@@ -332,12 +412,13 @@ function extractCurrentJob() {
 
     jd,
 
-    url: jobUrl,
+    url:
+      jobUrl,
   };
 }
 
 // =========================
-// Chrome Extension Message
+// Chrome Extension 消息监听
 // =========================
 
 chrome.runtime.onMessage.addListener(
@@ -351,11 +432,12 @@ chrome.runtime.onMessage.addListener(
       "JOBPILOT_EXTRACT"
     ) {
       try {
+        const job =
+          extractCurrentJob();
+
         sendResponse({
           success: true,
-
-          job:
-            extractCurrentJob(),
+          job,
         });
 
       } catch (error) {
