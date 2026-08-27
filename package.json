@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
+    "js-tiktoken": "^1.0.21",
     "mammoth": "^1.12.1",
     "next": "^15.5.0",
     "openai": "^5.12.0",
