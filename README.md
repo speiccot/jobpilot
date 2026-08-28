@@ -30,8 +30,17 @@ Browser Agent 正在开发中。
 
 ## Demo
 
-> TODO：添加 Chrome Extension、Dashboard、Fast Match Result、Candidate
-> Profile 和 Greeting Generation 截图 / GIF。
+### Chrome Extension：职位扫描与自动化入口
+
+JobPilot Chrome Extension 直接运行在 BOSS 直聘职位页面中，支持简历上传、当前职位分析、批量扫描以及后续 Browser Agent 自动投递流程。
+
+![JobPilot Chrome Extension - Batch Scan](docs/images/jobpilot-extension-batch-scan.jpg)
+
+### Dashboard：AI 匹配分析与 Greeting Generation
+
+Dashboard 汇总职位 Pipeline 状态，并展示每个职位的 Match Score、适配分析、核心匹配、主要缺口以及个性化招聘者开场白。
+
+![JobPilot Dashboard - Match Result](docs/images/jobpilot-dashboard-match-result.jpg)
 
 # 快速开始
 
